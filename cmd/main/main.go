@@ -33,6 +33,14 @@ type Category struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+type UserState struct {
+	CurrentState string
+	PreviousData string
+	PreviousMarkup *tgbotapi.InlineKeyboardMarkup
+}
+
+var userStates = make(map[int64]UserState)
+
 func main() {
 	// Замените на токен вашего бота
 	bot, err := tgbotapi.NewBotAPI("7918464444:AAFMleSbTQjwlE_ggIrL6bn5uXTABbv4Brg")
@@ -78,7 +86,7 @@ func main() {
 				log.Println(err)
 			}
 
-			msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "")
+			msg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, "")
 			if strings.HasPrefix(update.CallbackQuery.Data, "project_") {
 				slug := strings.TrimPrefix(update.CallbackQuery.Data, "project_")
 				url := fmt.Sprintf("http://185.178.47.249:1001/projects?slug=%s", slug)
@@ -88,6 +96,18 @@ func main() {
 					msg.Text = "Ошибка при получении данных."
 				} else {
 					msg.Text = response
+					msg.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
+						InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+							{
+								tgbotapi.NewInlineKeyboardButtonData("Назад", "back"),
+							},
+						},
+					}
+					userStates[update.CallbackQuery.Message.Chat.ID] = UserState{
+						CurrentState: "details",
+						PreviousData: update.CallbackQuery.Message.Text,
+						PreviousMarkup: update.CallbackQuery.Message.ReplyMarkup,
+					}
 				}
 			} else if strings.HasPrefix(update.CallbackQuery.Data, "category_") {
 				categoryID := strings.TrimPrefix(update.CallbackQuery.Data, "category_")
@@ -98,6 +118,27 @@ func main() {
 					msg.Text = "Ошибка при получении данных."
 				} else {
 					msg.Text = response
+					msg.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
+						InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+							{
+								tgbotapi.NewInlineKeyboardButtonData("Назад", "back"),
+							},
+						},
+					}
+					userStates[update.CallbackQuery.Message.Chat.ID] = UserState{
+						CurrentState: "details",
+						PreviousData: update.CallbackQuery.Message.Text,
+						PreviousMarkup: update.CallbackQuery.Message.ReplyMarkup,
+					}
+				}
+			} else if update.CallbackQuery.Data == "back" {
+				userState, exists := userStates[update.CallbackQuery.Message.Chat.ID]
+				if exists && userState.CurrentState == "details" {
+					msg.Text = userState.PreviousData
+					msg.ReplyMarkup = userState.PreviousMarkup
+					delete(userStates, update.CallbackQuery.Message.Chat.ID)
+				} else {
+					msg.Text = "Невозможно вернуться назад."
 				}
 			}
 			bot.Send(msg)
